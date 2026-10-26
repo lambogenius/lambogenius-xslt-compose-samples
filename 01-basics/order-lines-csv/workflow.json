@@ -1,0 +1,70 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. Returns its lines as CSV (xsl:output method=\"text\"), with quotes escaped."
+      }
+    },
+    "actions": {
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "deployed",
+            "mapName": "exports/order-lines-csv.xslt"
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": "attachment; filename=order-lines.csv"
+          },
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateless"
+}

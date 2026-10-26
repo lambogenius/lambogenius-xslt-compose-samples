@@ -1,0 +1,180 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST a batch of orders (requests/batch.xml). A For each loop transforms each order and collects the results in array, integer and float variables."
+      }
+    },
+    "actions": {
+      "Initialize_summaries": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "summaries",
+              "type": "array",
+              "value": []
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Initialize_processed": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "processed",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        },
+        "runAfter": {
+          "Initialize_summaries": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Initialize_grandTotal": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "grandTotal",
+              "type": "float",
+              "value": 0
+            }
+          ]
+        },
+        "runAfter": {
+          "Initialize_processed": [
+            "Succeeded"
+          ]
+        }
+      },
+      "For_each_order": {
+        "type": "Foreach",
+        "foreach": "@xpath(xml(triggerBody()), '/Batch/Order')",
+        "actions": {
+          "Compose_using_XSLT": {
+            "type": "ServiceProvider",
+            "description": "xpath() returns each Order as an XML node; xml() turns it back into XML text.",
+            "inputs": {
+              "parameters": {
+                "content": "@{xml(items('For_each_order'))}",
+                "mapSource": "deployed",
+                "mapName": "orders/order-summary.xslt"
+              },
+              "serviceProviderConfiguration": {
+                "connectionName": "lamboXsltCompose",
+                "operationId": "ComposeXslt",
+                "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+              },
+              "retryPolicy": {
+                "type": "none"
+              }
+            },
+            "runAfter": {}
+          },
+          "Append_to_summaries": {
+            "type": "AppendToArrayVariable",
+            "inputs": {
+              "name": "summaries",
+              "value": "@body('Compose_using_XSLT')?['result']"
+            },
+            "runAfter": {
+              "Compose_using_XSLT": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Increment_processed": {
+            "type": "IncrementVariable",
+            "inputs": {
+              "name": "processed",
+              "value": 1
+            },
+            "runAfter": {
+              "Append_to_summaries": [
+                "Succeeded"
+              ]
+            }
+          },
+          "Increment_grandTotal": {
+            "type": "IncrementVariable",
+            "inputs": {
+              "name": "grandTotal",
+              "value": "@float(last(split(body('Compose_using_XSLT')?['result'], ';')))"
+            },
+            "runAfter": {
+              "Increment_processed": [
+                "Succeeded"
+              ]
+            }
+          }
+        },
+        "runAfter": {
+          "Initialize_grandTotal": [
+            "Succeeded"
+          ]
+        },
+        "runtimeConfiguration": {
+          "concurrency": {
+            "repetitions": 1
+          }
+        },
+        "description": "Sequential, so the variables are updated one order at a time."
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "processed": "@variables('processed')",
+            "grandTotal": "@formatNumber(variables('grandTotal'), '0.00', 'en-US')",
+            "summaries": "@variables('summaries')"
+          }
+        },
+        "runAfter": {
+          "For_each_order": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "failed",
+            "detail": "@result('For_each_order')"
+          }
+        },
+        "runAfter": {
+          "For_each_order": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

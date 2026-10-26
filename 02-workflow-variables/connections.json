@@ -1,0 +1,13 @@
+{
+  "serviceProviderConnections": {
+    "lamboXsltCompose": {
+      "displayName": "Lambogenius XSLT",
+      "serviceProvider": {
+        "id": "/serviceProviders/lamboXsltCompose"
+      },
+      "parameterValues": {
+        "mapFolder": ""
+      }
+    }
+  }
+}

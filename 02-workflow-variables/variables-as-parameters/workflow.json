@@ -1,0 +1,167 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. Query: currency (default CAD), maxLines (default 10); header x-expedite: true. Each value is a workflow variable passed to the map as an XSLT parameter."
+      }
+    },
+    "actions": {
+      "Initialize_currency": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "currency",
+              "type": "string",
+              "value": "@{coalesce(triggerOutputs()?['queries']?['currency'], 'CAD')}"
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Initialize_taxRate": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "taxRate",
+              "type": "float",
+              "value": 0.13
+            }
+          ]
+        },
+        "runAfter": {
+          "Initialize_currency": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Initialize_expedite": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "expedite",
+              "type": "boolean",
+              "value": "@equals(toLower(coalesce(triggerOutputs()?['headers']?['x-expedite'], 'false')), 'true')"
+            }
+          ]
+        },
+        "runAfter": {
+          "Initialize_taxRate": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Initialize_maxLines": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "maxLines",
+              "type": "integer",
+              "value": "@int(coalesce(triggerOutputs()?['queries']?['maxLines'], '10'))"
+            }
+          ]
+        },
+        "runAfter": {
+          "Initialize_expedite": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "description": "String, float, boolean and integer variables become XSLT string, number and boolean parameters.",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "deployed",
+            "mapName": "invoices/order-to-invoice.xslt",
+            "parameters": {
+              "currency": "@variables('currency')",
+              "taxRate": "@variables('taxRate')",
+              "expedite": "@variables('expedite')",
+              "maxLines": "@variables('maxLines')"
+            }
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {
+          "Initialize_maxLines": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Initialize_invoiceTotal": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "invoiceTotal",
+              "type": "string",
+              "value": "@{xpath(xml(body('Compose_using_XSLT')?['result']), 'string(/Invoice/Total)')}"
+            }
+          ]
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "currency": "@variables('currency')",
+            "expedite": "@variables('expedite')",
+            "maxLines": "@variables('maxLines')",
+            "invoiceTotal": "@float(variables('invoiceTotal'))",
+            "invoice": "@body('Compose_using_XSLT')?['result']"
+          }
+        },
+        "runAfter": {
+          "Initialize_invoiceTotal": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

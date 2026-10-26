@@ -1,0 +1,82 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order (or requests/malformed-order.xml). The action runs in a Scope; a failure is caught and returned as JSON with HTTP 400."
+      }
+    },
+    "actions": {
+      "Transform": {
+        "type": "Scope",
+        "actions": {
+          "Compose_using_XSLT": {
+            "type": "ServiceProvider",
+            "inputs": {
+              "parameters": {
+                "content": "@{triggerBody()}",
+                "mapSource": "deployed",
+                "mapName": "orders/order-to-sales-order.xslt"
+              },
+              "serviceProviderConfiguration": {
+                "connectionName": "lamboXsltCompose",
+                "operationId": "ComposeXslt",
+                "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+              },
+              "retryPolicy": {
+                "type": "none"
+              }
+            },
+            "runAfter": {}
+          }
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "@{body('Compose_using_XSLT')?['contentType']}"
+          },
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Transform": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 400,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "failed",
+            "action": "@{first(result('Transform'))?['name']}",
+            "message": "@{coalesce(first(result('Transform'))?['outputs']?['body']?['message'], first(result('Transform'))?['error']?['message'])}"
+          }
+        },
+        "runAfter": {
+          "Transform": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

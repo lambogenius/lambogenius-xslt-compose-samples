@@ -1,0 +1,89 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. The map uses C# (code:NormalizeCode) and calls the GetCustomerName Function (az:InvokeText)."
+      }
+    },
+    "actions": {
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "description": "allowedFunctionAliases lists the Functions this action may call; the registry (xslt-functions.json) says where they are and how to authenticate.",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "deployed",
+            "mapName": "orders/order-to-sales-order.xslt",
+            "parameters": {
+              "currency": "CAD"
+            },
+            "enableScripts": true,
+            "allowedFunctionAliases": [
+              "GetCustomerName"
+            ],
+            "timeoutSeconds": 30
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {}
+      },
+      "Customer_name": {
+        "type": "Compose",
+        "inputs": "@xpath(xml(body('Compose_using_XSLT')?['result']), 'string(/SalesOrder/Customer/Name)')",
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "@{body('Compose_using_XSLT')?['contentType']}",
+            "X-Customer-Name": "@{outputs('Customer_name')}",
+            "X-Function-Calls": "@{body('Compose_using_XSLT')?['diagnostics']?['functionCallCount']}"
+          },
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Customer_name": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

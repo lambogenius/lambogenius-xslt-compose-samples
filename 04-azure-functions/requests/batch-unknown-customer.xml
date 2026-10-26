@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Batch>
+  <Order><Number>ord-1001</Number><CustomerId>C100</CustomerId></Order>
+  <Order><Number>ord-1005</Number><CustomerId>C999</CustomerId></Order>
+</Batch>

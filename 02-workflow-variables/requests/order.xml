@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Order>
+  <Number> ord-1001 </Number>
+  <OrderDate>2026-10-20</OrderDate>
+  <CustomerId>C100</CustomerId>
+  <ShipTo>
+    <Name>Acme Supplies</Name>
+    <Street>100 King St W</Street>
+    <City>Toronto</City>
+    <Province>on</Province>
+    <PostalCode>m5x1a9</PostalCode>
+  </ShipTo>
+  <Lines>
+    <Line>
+      <Sku> abc-01 </Sku>
+      <Description>Widget</Description>
+      <Quantity>2</Quantity>
+      <UnitPrice>9.99</UnitPrice>
+    </Line>
+    <Line>
+      <Sku>xyz-77</Sku>
+      <Description>Gadget, large</Description>
+      <Quantity>1</Quantity>
+      <UnitPrice>24.50</UnitPrice>
+    </Line>
+    <Line>
+      <Sku>abc-02</Sku>
+      <Description>Widget "Pro" &amp; case</Description>
+      <Quantity>3</Quantity>
+      <UnitPrice>5.00</UnitPrice>
+    </Line>
+  </Lines>
+</Order>

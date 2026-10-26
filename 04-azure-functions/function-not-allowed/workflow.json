@@ -1,0 +1,81 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. The same map, but this action does not list GetCustomerName in allowedFunctionAliases, so the call is refused before anything is sent (HTTP 403)."
+      }
+    },
+    "actions": {
+      "Transform": {
+        "type": "Scope",
+        "actions": {
+          "Compose_using_XSLT": {
+            "type": "ServiceProvider",
+            "description": "No aliases allowed: a map cannot call a Function the workflow author did not approve.",
+            "inputs": {
+              "parameters": {
+                "content": "@{triggerBody()}",
+                "mapSource": "deployed",
+                "mapName": "functions/enrich-orders.xslt",
+                "allowedFunctionAliases": []
+              },
+              "serviceProviderConfiguration": {
+                "connectionName": "lamboXsltCompose",
+                "operationId": "ComposeXslt",
+                "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+              },
+              "retryPolicy": {
+                "type": "none"
+              }
+            },
+            "runAfter": {}
+          }
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Transform": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 403,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "failed",
+            "action": "@{first(result('Transform'))?['name']}",
+            "message": "@{coalesce(first(result('Transform'))?['outputs']?['body']?['message'], first(result('Transform'))?['error']?['message'])}"
+          }
+        },
+        "runAfter": {
+          "Transform": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

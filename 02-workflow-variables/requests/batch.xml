@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Batch>
+  <Order>
+    <Number>ord-1001</Number>
+    <CustomerId>C100</CustomerId>
+    <Lines>
+      <Line><Sku>abc-01</Sku><Quantity>2</Quantity><UnitPrice>9.99</UnitPrice></Line>
+      <Line><Sku>xyz-77</Sku><Quantity>1</Quantity><UnitPrice>24.50</UnitPrice></Line>
+      <Line><Sku>abc-02</Sku><Quantity>3</Quantity><UnitPrice>5.00</UnitPrice></Line>
+    </Lines>
+  </Order>
+  <Order>
+    <Number>ord-1002</Number>
+    <CustomerId>C200</CustomerId>
+    <Lines>
+      <Line><Sku>abc-01</Sku><Quantity>2</Quantity><UnitPrice>12.25</UnitPrice></Line>
+    </Lines>
+  </Order>
+  <Order>
+    <Number>ord-1003</Number>
+    <CustomerId>C300</CustomerId>
+    <Lines>
+      <Line><Sku>big-01</Sku><Quantity>1</Quantity><UnitPrice>100.00</UnitPrice></Line>
+    </Lines>
+  </Order>
+</Batch>

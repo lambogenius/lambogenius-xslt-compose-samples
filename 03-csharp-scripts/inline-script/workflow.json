@@ -1,0 +1,70 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. An inline map with a C# helper returns the shipping address as one cleaned-up line."
+      }
+    },
+    "actions": {
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "inline",
+            "xslt": "<xsl:stylesheet version=\"1.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" xmlns:msxsl=\"urn:schemas-microsoft-com:xslt\" xmlns:addr=\"urn:samples:address\" exclude-result-prefixes=\"msxsl addr\">\n  <xsl:output method=\"text\"/>\n  <msxsl:script language=\"C#\" implements-prefix=\"addr\"><![CDATA[\n    public string Line(string name, string street, string city, string province, string postalCode)\n    {\n        var code = Regex.Replace(postalCode ?? \"\", \"[^A-Za-z0-9]\", \"\").ToUpperInvariant();\n        if (code.Length == 6) code = code.Substring(0, 3) + \" \" + code.Substring(3);\n        return string.Join(\", \", name.Trim().ToUpperInvariant(), street.Trim(), city.Trim() + \" \" + province.Trim().ToUpperInvariant() + \" \" + code);\n    }\n  ]]></msxsl:script>\n  <xsl:template match=\"/Order\">\n    <xsl:value-of select=\"addr:Line(string(ShipTo/Name), string(ShipTo/Street), string(ShipTo/City), string(ShipTo/Province), string(ShipTo/PostalCode))\"/>\n  </xsl:template>\n</xsl:stylesheet>",
+            "enableScripts": true
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "@{body('Compose_using_XSLT')?['contentType']}"
+          },
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateless"
+}

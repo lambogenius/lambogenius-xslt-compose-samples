@@ -1,0 +1,160 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. Query: threshold (default 100). The map returns auto, review or reject; a Switch on that variable picks the response."
+      }
+    },
+    "actions": {
+      "Initialize_threshold": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "threshold",
+              "type": "float",
+              "value": "@float(coalesce(triggerOutputs()?['queries']?['threshold'], '100'))"
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "deployed",
+            "mapName": "approval/approval-route.xslt",
+            "parameters": {
+              "threshold": "@variables('threshold')"
+            }
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {
+          "Initialize_threshold": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Initialize_route": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "route",
+              "type": "string",
+              "value": "@{trim(body('Compose_using_XSLT')?['result'])}"
+            }
+          ]
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Switch_on_route": {
+        "type": "Switch",
+        "expression": "@variables('route')",
+        "cases": {
+          "Auto": {
+            "case": "auto",
+            "actions": {
+              "Approved": {
+                "type": "Response",
+                "kind": "Http",
+                "inputs": {
+                  "statusCode": 200,
+                  "headers": {
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "route": "auto",
+                    "message": "Approved automatically."
+                  }
+                },
+                "runAfter": {}
+              }
+            }
+          },
+          "Review": {
+            "case": "review",
+            "actions": {
+              "Needs_review": {
+                "type": "Response",
+                "kind": "Http",
+                "inputs": {
+                  "statusCode": 202,
+                  "headers": {
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "route": "review",
+                    "message": "Sent for review: the total is over the threshold."
+                  }
+                },
+                "runAfter": {}
+              }
+            }
+          }
+        },
+        "default": {
+          "actions": {
+            "Rejected": {
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "statusCode": 422,
+                "headers": {
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "route": "@variables('route')",
+                  "message": "Rejected: the order has no lines."
+                }
+              },
+              "runAfter": {}
+            }
+          }
+        },
+        "runAfter": {
+          "Initialize_route": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

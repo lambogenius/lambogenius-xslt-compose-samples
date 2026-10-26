@@ -1,0 +1,77 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. The map's msxsl:script C# helpers format money and dates, clean up the postal code, check SKUs and compute a check digit."
+      }
+    },
+    "actions": {
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "description": "enableScripts must be true for maps with msxsl:script, and the host setting XsltCompose__AllowScripts must allow it.",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "deployed",
+            "mapName": "scripts/invoice-with-helpers.xslt",
+            "parameters": {
+              "currency": "CAD"
+            },
+            "enableScripts": true,
+            "timeoutSeconds": 30
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "@{body('Compose_using_XSLT')?['contentType']}",
+            "X-Compile-Cache-Hit": "@{body('Compose_using_XSLT')?['diagnostics']?['compileCacheHit']}",
+            "X-Compile-Ms": "@{body('Compose_using_XSLT')?['diagnostics']?['compileMs']}"
+          },
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

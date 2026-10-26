@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    NuGet-based Logic Apps Standard project that uses Compose using XSLT like any customer project would.
+    ./run.ps1 builds it and runs `func start` in bin/<Configuration>/net8.0 on port 7183.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <TargetFramework>net8.0</TargetFramework>
+    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+    <OutputType>Library</OutputType>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Workflows.WebJobs.Extension" Version="1.170.91" />
+    <PackageReference Include="Microsoft.NET.Sdk.Functions" Version="4.5.0" />
+  </ItemGroup>
+
+  <!--
+    The connector package, downloaded from lambogenius.com into ../packages (see packages/README.md). The repository's
+    nuget.config makes that folder a package source. Its build targets copy the XSLT worker to <output>/xslt-worker/.
+  -->
+  <PropertyGroup>
+    <XsltComposeVersion Condition="'$(XsltComposeVersion)' == ''">1.0.0</XsltComposeVersion>
+    <XsltComposeFeed Condition="'$(XsltComposeFeed)' == ''">$(MSBuildThisFileDirectory)..\packages</XsltComposeFeed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Lambogenius.XsltCompose.LogicApps" Version="$(XsltComposeVersion)" />
+  </ItemGroup>
+
+  <!--
+    NuGet caches a package by version, so a replaced package with an unchanged version would be ignored. Before
+    restoring, drop the cached copy of this one package when it differs from the package in the feed.
+  -->
+  <Target Name="RefreshXsltComposePackage" BeforeTargets="Restore;_GenerateRestoreGraph">
+    <PropertyGroup>
+      <_XcPackagesRoot Condition="'$(NUGET_PACKAGES)' != ''">$(NUGET_PACKAGES)</_XcPackagesRoot>
+      <_XcPackagesRoot Condition="'$(_XcPackagesRoot)' == '' And '$(UserProfile)' != ''">$(UserProfile)/.nuget/packages</_XcPackagesRoot>
+      <_XcPackagesRoot Condition="'$(_XcPackagesRoot)' == ''">$(HOME)/.nuget/packages</_XcPackagesRoot>
+      <_XcCachedDir>$(_XcPackagesRoot)/lambogenius.xsltcompose.logicapps/$(XsltComposeVersion)</_XcCachedDir>
+      <_XcCachedHashFile>$(_XcCachedDir)/lambogenius.xsltcompose.logicapps.$(XsltComposeVersion).nupkg.sha512</_XcCachedHashFile>
+      <_XcFeedPackage>$(XsltComposeFeed)/Lambogenius.XsltCompose.LogicApps.$(XsltComposeVersion).nupkg</_XcFeedPackage>
+    </PropertyGroup>
+    <GetFileHash Files="$(_XcFeedPackage)" Algorithm="SHA512" HashEncoding="base64" Condition="Exists('$(_XcFeedPackage)') And Exists('$(_XcCachedHashFile)')">
+      <Output TaskParameter="Hash" PropertyName="_XcFeedHash" />
+    </GetFileHash>
+    <PropertyGroup Condition="'$(_XcFeedHash)' != ''">
+      <_XcCachedHash>$([System.IO.File]::ReadAllText('$(_XcCachedHashFile)').Trim())</_XcCachedHash>
+    </PropertyGroup>
+    <Message Importance="high" Text="Lambogenius.XsltCompose.LogicApps $(XsltComposeVersion) changed in $(XsltComposeFeed); refreshing the NuGet cache." Condition="'$(_XcFeedHash)' != '' And '$(_XcFeedHash)' != '$(_XcCachedHash)'" />
+    <RemoveDir Directories="$(_XcCachedDir)" Condition="'$(_XcFeedHash)' != '' And '$(_XcFeedHash)' != '$(_XcCachedHash)'" />
+  </Target>
+
+  <ItemGroup>
+    <None Include="host.json;connections.json;parameters.json;xslt-functions*.json;**\workflow.json;Artifacts\**\*" Exclude="bin\**;obj\**;workflow-designtime\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="local.settings.json" Condition="Exists('local.settings.json')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <!--
+    The VS Code Logic Apps extension writes "extensionBundle" into host.json when it opens the project, but with that
+    section `func start` loads built-in connectors from the extension bundle and ignores this project's packages. The
+    source host.json may keep it; the copies the runtime uses (build output and publish folder) have it removed.
+  -->
+  <Target Name="RemoveExtensionBundleFromOutputHostJson" AfterTargets="Build" Condition="Exists('$(OutDir)host.json')">
+    <PropertyGroup>
+      <_HostJsonText>$([System.IO.File]::ReadAllText('$(OutDir)host.json'))</_HostJsonText>
+      <_HostJsonStripped>$([System.Text.RegularExpressions.Regex]::Replace('$(_HostJsonText)', '"extensionBundle"\s*:\s*\{[^{}]*\}\s*,', ''))</_HostJsonStripped>
+      <_HostJsonStripped>$([System.Text.RegularExpressions.Regex]::Replace('$(_HostJsonStripped)', ',\s*"extensionBundle"\s*:\s*\{[^{}]*\}', ''))</_HostJsonStripped>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(OutDir)host.json" Lines="$([MSBuild]::Escape('$(_HostJsonStripped)'))" Overwrite="true" Condition="'$(_HostJsonStripped)' != '$(_HostJsonText)'" />
+  </Target>
+
+  <Target Name="RemoveExtensionBundleFromPublishHostJson" AfterTargets="Publish" Condition="'$(PublishDir)' != '' And Exists('$(PublishDir)host.json')">
+    <PropertyGroup>
+      <_HostJsonText>$([System.IO.File]::ReadAllText('$(PublishDir)host.json'))</_HostJsonText>
+      <_HostJsonStripped>$([System.Text.RegularExpressions.Regex]::Replace('$(_HostJsonText)', '"extensionBundle"\s*:\s*\{[^{}]*\}\s*,', ''))</_HostJsonStripped>
+      <_HostJsonStripped>$([System.Text.RegularExpressions.Regex]::Replace('$(_HostJsonStripped)', ',\s*"extensionBundle"\s*:\s*\{[^{}]*\}', ''))</_HostJsonStripped>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(PublishDir)host.json" Lines="$([MSBuild]::Escape('$(_HostJsonStripped)'))" Overwrite="true" Condition="'$(_HostJsonStripped)' != '$(_HostJsonText)'" />
+  </Target>
+</Project>

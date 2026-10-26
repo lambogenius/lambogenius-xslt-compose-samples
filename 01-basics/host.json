@@ -1,0 +1,12 @@
+{
+  "version": "2.0",
+  "logging": {
+    "logLevel": {
+      "Lambogenius.XsltCompose": "Information"
+    }
+  },
+  "extensionBundle": {
+    "id": "Microsoft.Azure.Functions.ExtensionBundle.Workflows",
+    "version": "[1.*, 2.0.0)"
+  }
+}

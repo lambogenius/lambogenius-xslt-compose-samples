@@ -1,0 +1,82 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST anything XML. The map's C# never returns; timeoutSeconds=5 stops it and the workflow answers 504."
+      }
+    },
+    "actions": {
+      "Transform": {
+        "type": "Scope",
+        "actions": {
+          "Compose_using_XSLT": {
+            "type": "ServiceProvider",
+            "description": "A runaway script cannot hang the workflow: after 5 seconds the action fails with TransformationTimeout.",
+            "inputs": {
+              "parameters": {
+                "content": "@{triggerBody()}",
+                "mapSource": "inline",
+                "xslt": "<xsl:stylesheet version=\"1.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\" xmlns:msxsl=\"urn:schemas-microsoft-com:xslt\" xmlns:bad=\"urn:samples:runaway\" exclude-result-prefixes=\"msxsl bad\">\n  <xsl:output method=\"text\"/>\n  <msxsl:script language=\"C#\" implements-prefix=\"bad\"><![CDATA[\n    // A bug that never returns. The action's deadline stops it: the worker process running it is killed.\n    public string Forever(string value)\n    {\n        while (true) { }\n    }\n  ]]></msxsl:script>\n  <xsl:template match=\"/\">\n    <xsl:value-of select=\"bad:Forever('x')\"/>\n  </xsl:template>\n</xsl:stylesheet>",
+                "enableScripts": true,
+                "timeoutSeconds": 5
+              },
+              "serviceProviderConfiguration": {
+                "connectionName": "lamboXsltCompose",
+                "operationId": "ComposeXslt",
+                "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+              },
+              "retryPolicy": {
+                "type": "none"
+              }
+            },
+            "runAfter": {}
+          }
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Transform": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 504,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "failed",
+            "action": "@{first(result('Transform'))?['name']}",
+            "message": "@{coalesce(first(result('Transform'))?['outputs']?['body']?['message'], first(result('Transform'))?['error']?['message'])}"
+          }
+        },
+        "runAfter": {
+          "Transform": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

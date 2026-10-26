@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "functions": {
+    "GetCustomerName": {
+      "endpoint": "http://localhost:7180/api/GetCustomerName",
+      "authentication": {
+        "mode": "FunctionKey",
+        "keySetting": "GetCustomerNameFunctionKey"
+      },
+      "timeoutSeconds": 5,
+      "maxRequestBytes": 65536,
+      "maxResponseBytes": 65536,
+      "cacheWithinTransform": true,
+      "retryCount": 0
+    }
+  }
+}

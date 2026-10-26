@@ -1,0 +1,73 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. The stylesheet is written in the workflow itself (mapSource inline) and produces text."
+      }
+    },
+    "actions": {
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "description": "Inline map: no deployment needed, but it cannot include or import other modules.",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "inline",
+            "xslt": "<xsl:stylesheet version=\"1.0\" xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\"><xsl:output method=\"text\"/><xsl:param name=\"separator\" select=\"';'\"/><xsl:template match=\"/Order\"><xsl:value-of select=\"normalize-space(Number)\"/><xsl:value-of select=\"$separator\"/><xsl:value-of select=\"CustomerId\"/><xsl:value-of select=\"$separator\"/><xsl:value-of select=\"count(Lines/Line)\"/><xsl:value-of select=\"$separator\"/><xsl:value-of select=\"sum(Lines/Line/Quantity)\"/></xsl:template></xsl:stylesheet>",
+            "parameters": {
+              "separator": "|"
+            }
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {}
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "@{body('Compose_using_XSLT')?['contentType']}"
+          },
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateless"
+}

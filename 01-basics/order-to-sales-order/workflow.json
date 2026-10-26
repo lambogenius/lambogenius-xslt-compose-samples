@@ -1,0 +1,87 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order (requests/order.xml). Optional query: currency=USD. Runs a deployed map that imports a shared module, then reads the result with xpath()."
+      }
+    },
+    "actions": {
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "description": "Deployed map (Artifacts/Maps/orders/order-to-sales-order.xslt). It imports common/normalize.xslt.",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "deployed",
+            "mapName": "orders/order-to-sales-order.xslt",
+            "parameters": {
+              "currency": "@{coalesce(triggerOutputs()?['queries']?['currency'], 'CAD')}"
+            },
+            "timeoutSeconds": 30
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {}
+      },
+      "Order_total": {
+        "type": "Compose",
+        "description": "A later action reads the transformed XML.",
+        "inputs": "@xpath(xml(body('Compose_using_XSLT')?['result']), 'string(/SalesOrder/Total)')",
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "@{body('Compose_using_XSLT')?['contentType']}",
+            "X-Order-Total": "@{outputs('Order_total')}",
+            "X-Map-Hash": "@{body('Compose_using_XSLT')?['mapHash']}",
+            "X-Transform-Ms": "@{body('Compose_using_XSLT')?['diagnostics']?['transformMs']}"
+          },
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Order_total": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

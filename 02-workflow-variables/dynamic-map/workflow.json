@@ -1,0 +1,105 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_an_HTTP_request_is_received": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "method": "POST"
+        },
+        "description": "POST an order. Query: format=xml (default) or format=text. A variable picks which deployed map runs."
+      }
+    },
+    "actions": {
+      "Initialize_format": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "format",
+              "type": "string",
+              "value": "@{toLower(coalesce(triggerOutputs()?['queries']?['format'], 'xml'))}"
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "Initialize_mapName": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "mapName",
+              "type": "string",
+              "value": "@{if(equals(variables('format'), 'text'), 'invoices/invoice-summary.xslt', 'invoices/order-to-invoice.xslt')}"
+            }
+          ]
+        },
+        "runAfter": {
+          "Initialize_format": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Compose_using_XSLT": {
+        "type": "ServiceProvider",
+        "description": "mapName is an expression, so one action can run different maps.",
+        "inputs": {
+          "parameters": {
+            "content": "@{triggerBody()}",
+            "mapSource": "deployed",
+            "mapName": "@variables('mapName')"
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "lamboXsltCompose",
+            "operationId": "ComposeXslt",
+            "serviceProviderId": "/serviceProviders/lamboXsltCompose"
+          },
+          "retryPolicy": {
+            "type": "none"
+          }
+        },
+        "runAfter": {
+          "Initialize_mapName": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "@{body('Compose_using_XSLT')?['contentType']}",
+            "X-Map-Name": "@{variables('mapName')}"
+          },
+          "body": "@body('Compose_using_XSLT')?['result']"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Error_response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 500,
+          "body": "@outputs('Compose_using_XSLT')"
+        },
+        "runAfter": {
+          "Compose_using_XSLT": [
+            "Failed",
+            "TimedOut"
+          ]
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}
