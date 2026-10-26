@@ -36,7 +36,7 @@ function Get-XsltPackageVersion([string]$app) {
     [xml]$project = Get-Content (Join-Path $app 'LogicApp.csproj')
     $version = $project.Project.PropertyGroup | ForEach-Object { $_.XsltComposeVersion } | Where-Object { $_ } | Select-Object -First 1
     if ($version -is [System.Xml.XmlElement]) { $version = $version.'#text' }
-    if ($version) { $version } else { '1.0.0' }
+    if ($version) { $version } else { '1.1.0' }
 }
 
 <#

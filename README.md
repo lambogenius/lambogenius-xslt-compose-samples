@@ -25,7 +25,15 @@ checks the results.
 - **Azurite**: `npm install -g azurite`. The scripts start it, or reuse one that is already running.
 - **PowerShell 7** (`pwsh`)
 - **The connector package**: sign in at <https://lambogenius.com/app/downloads/xslt-compose>, download
-  `Lambogenius.XsltCompose.LogicApps.1.0.0.nupkg`, and save it in [packages/](packages)
+  `Lambogenius.XsltCompose.LogicApps.1.1.0.nupkg`, and save it in [packages/](packages)
+
+## Licensing
+
+The samples run without a license: under Azure Functions Core Tools (`func start`) on a developer machine the action
+runs unlicensed and logs a reminder. Anywhere else (Azure, containers, `dotnet run`) it needs a license token in the
+app setting `LAMBOGENIUS_LICENSE`, or it fails with `LicenseRequired` (HTTP 403). Get a token at
+<https://lambogenius.com/app/licensing>: a free developer license for development and testing (Azure included), a
+free 30-day trial, or a production license from sales.
 
 ## Run a sample
 
@@ -93,7 +101,7 @@ The action returns `result` (the transformed text), `contentType`, `outputMethod
 1. The project must be NuGet-based (`Microsoft.Azure.Workflows.WebJobs.Extension` and
    `Microsoft.NET.Sdk.Functions`), like `LogicApp.csproj` here.
 2. Add the folder or feed that holds the package to your `nuget.config`, then
-   `dotnet add package Lambogenius.XsltCompose.LogicApps --version 1.0.0`.
+   `dotnet add package Lambogenius.XsltCompose.LogicApps --version 1.1.0`.
 3. Copy the `RemoveExtensionBundleFrom...` targets from a sample's `LogicApp.csproj`, so the runtime loads your
    project's packages instead of the extension bundle.
 4. Set `FUNCTIONS_INPROC_NET8_ENABLED=1` and add the `lamboXsltCompose` connection.
