@@ -22,7 +22,7 @@
     nuget.config makes that folder a package source. Its build targets copy the XSLT worker to <output>/xslt-worker/.
   -->
   <PropertyGroup>
-    <XsltComposeVersion Condition="'$(XsltComposeVersion)' == ''">1.1.0</XsltComposeVersion>
+    <XsltComposeVersion Condition="'$(XsltComposeVersion)' == ''">1.1.1</XsltComposeVersion>
     <XsltComposeFeed Condition="'$(XsltComposeFeed)' == ''">$(MSBuildThisFileDirectory)..\packages</XsltComposeFeed>
   </PropertyGroup>
 
